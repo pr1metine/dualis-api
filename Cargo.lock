@@ -428,6 +428,7 @@ dependencies = [
  "actix-web",
  "reqwest",
  "select",
+ "serde",
 ]
 
 [[package]]
