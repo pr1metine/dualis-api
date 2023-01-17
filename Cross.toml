@@ -1,0 +1,3 @@
+# Cross.toml
+[target.aarch64-unknown-linux-musl]
+dockerfile = "Dockerfile.aarch64-builder-base"
