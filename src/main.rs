@@ -1,8 +1,11 @@
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::middleware::Logger;
+use env_logger::Env;
 
 mod session;
 mod data;
 
+use log::info;
 use session::DualisSession;
 use data::query::CoursesQuery;
 
@@ -50,15 +53,20 @@ async fn courses(query: web::Query<CoursesQuery>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init_from_env(Env::default().default_filter_or("info"));
+    info!("Actix web server starting...");
     let host = std::env::var("HOST").unwrap_or("127.0.0.1".into());
     let port = std::env::var("PORT")
         .unwrap_or("8080".into())
         .parse()
         .unwrap_or(8080);
     let path_prefix = std::env!("CARGO_PKG_VERSION");
+    info!("Host: {host}");
+    info!("Port: {port}");
+    info!("Path prefix: {path_prefix}");
 
     HttpServer::new(|| {
-        App::new().service(web::scope(path_prefix).service(semesters).service(courses))
+        App::new().wrap(Logger::default()).service(web::scope(path_prefix).service(semesters).service(courses))
     })
     .bind((host, port))?
     .run()
