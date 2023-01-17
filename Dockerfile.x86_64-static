@@ -1,0 +1,22 @@
+FROM clux/muslrust:stable as chef
+USER root
+RUN cargo install cargo-chef
+WORKDIR /app
+
+FROM chef as preper
+COPY . .
+RUN cargo chef prepare --recipe-path /app/recipe.json
+
+FROM chef as builder
+COPY --from=preper /app/recipe.json /app/recipe.json
+RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path /app/recipe.json
+COPY . .
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+FROM alpine as app
+RUN apk update && apk add ca-certificates
+WORKDIR /app
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/dualis-api /app/
+EXPOSE 8080
+ENV USRNAME, PASS, HOST, PORT
+ENTRYPOINT ["/app/dualis-api"]
