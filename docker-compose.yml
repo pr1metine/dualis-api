@@ -4,3 +4,9 @@ services:
   dualis-api:
     image: pr1metine/dualis-api
     build: '.'
+    environment:
+      - HOST=0.0.0.0
+      - USRNAME=${USRNAME}
+      - PASS=${PASS}
+    ports:
+      - "80:8080"

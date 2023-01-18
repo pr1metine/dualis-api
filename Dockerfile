@@ -16,5 +16,6 @@ RUN cargo build --release
 
 FROM debian:bullseye-slim
 RUN apt-get update && apt-get upgrade
+RUN apt-get update && apt-get install -y ca-certificates
 COPY --from=builder /app/target/release/dualis-api /
 ENTRYPOINT [ "/dualis-api" ]
