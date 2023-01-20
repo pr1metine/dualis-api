@@ -13,8 +13,12 @@ pub struct DualisSession<'a> {
     client: Client,
 }
 
-impl<'a> DualisSession<'a>{
-    pub async fn log_into_dualis (url: &'a str, usrname: &str, pass: &str) -> Result<DualisSession<'a>, Box<dyn Error>> {
+impl<'a> DualisSession<'a> {
+    pub async fn log_into_dualis(
+        url: &'a str,
+        usrname: &str,
+        pass: &str,
+    ) -> Result<DualisSession<'a>, Box<dyn Error>> {
         let form: [(&str, &str); 9] = [
             ("usrname", usrname),
             ("pass", pass),
@@ -48,13 +52,17 @@ impl<'a> DualisSession<'a>{
             .skip_while(|c| *c != '-')
             .take(26)
             .collect();
-        Ok(Self { url, arguments, client })
+        Ok(Self {
+            url,
+            arguments,
+            client,
+        })
     }
 
     pub async fn get_semesters(&self) -> Result<Vec<DHBWSemester>, Box<dyn Error>> {
         let response = self
             .client
-            .get(format!("https://{}/scripts/mgrqispi.dll",self.url))
+            .get(format!("https://{}/scripts/mgrqispi.dll", self.url))
             .query(&[
                 ("APPNAME", "CampusNet"),
                 ("PRGNAME", "COURSERESULTS"),

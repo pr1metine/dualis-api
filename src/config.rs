@@ -28,11 +28,7 @@ impl DualisCredentials {
             .map_err(|e| format!("PASS environment variable not specified ({})", e))?;
 
         info!("Loaded dualis credentials from environment variables!");
-        Ok(Self {
-            url,
-            usrname,
-            pass,
-        })
+        Ok(Self { url, usrname, pass })
     }
 
     pub fn url(&self) -> &str {
@@ -46,5 +42,4 @@ impl DualisCredentials {
     pub fn pass(&self) -> &str {
         self.pass.as_ref()
     }
-
 }

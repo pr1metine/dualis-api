@@ -1,6 +1,6 @@
 pub mod course;
-pub mod semester;
 pub mod query;
+pub mod semester;
 
 pub use course::DHBWCourse;
 pub use semester::DHBWSemester;
