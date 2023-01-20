@@ -7,20 +7,17 @@ use crate::data::DHBWCourse;
 use crate::data::DHBWSemester;
 
 #[derive(Debug)]
-pub struct DualisSession {
+pub struct DualisSession<'a> {
+    url: &'a str,
     arguments: String,
     client: Client,
 }
 
-impl DualisSession {
-    pub async fn log_into_dualis() -> Result<Self, Box<dyn Error>> {
-        let usrname = std::env::var("USRNAME")
-            .map_err(|_| "USRNAME environment variable not specified...")?;
-        let pass =
-            std::env::var("PASS").map_err(|_| "PASS environment variable not specified...")?;
+impl<'a> DualisSession<'a>{
+    pub async fn log_into_dualis (url: &'a str, usrname: &str, pass: &str) -> Result<DualisSession<'a>, Box<dyn Error>> {
         let form: [(&str, &str); 9] = [
-            ("usrname", usrname.as_str()),
-            ("pass", pass.as_str()),
+            ("usrname", usrname),
+            ("pass", pass),
             ("APPNAME", "CampusNet"),
             ("PRGNAME", "LOGINCHECK"),
             (
@@ -35,7 +32,7 @@ impl DualisSession {
 
         let client = Client::builder().cookie_store(true).build()?;
         let response = client
-            .post(format!("https://{}/scripts/mgrqispi.dll", "dualis.dhbw.de"))
+            .post(format!("https://{}/scripts/mgrqispi.dll", url))
             .form(&form)
             .send()
             .await?
@@ -51,13 +48,13 @@ impl DualisSession {
             .skip_while(|c| *c != '-')
             .take(26)
             .collect();
-        Ok(Self { arguments, client })
+        Ok(Self { url, arguments, client })
     }
 
     pub async fn get_semesters(&self) -> Result<Vec<DHBWSemester>, Box<dyn Error>> {
         let response = self
             .client
-            .get(format!("https://{}/scripts/mgrqispi.dll", "dualis.dhbw.de"))
+            .get(format!("https://{}/scripts/mgrqispi.dll",self.url))
             .query(&[
                 ("APPNAME", "CampusNet"),
                 ("PRGNAME", "COURSERESULTS"),
@@ -86,7 +83,7 @@ impl DualisSession {
         let arguments = format!("{},-N{}", self.arguments, semester_id);
         let response = self
             .client
-            .get(format!("https://{}/scripts/mgrqispi.dll", "dualis.dhbw.de"))
+            .get(format!("https://{}/scripts/mgrqispi.dll", self.url))
             .query(&[
                 ("APPNAME", "CampusNet"),
                 ("PRGNAME", "COURSERESULTS"),
@@ -114,7 +111,7 @@ impl DualisSession {
     }
 }
 
-impl Display for DualisSession {
+impl Display for DualisSession<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
