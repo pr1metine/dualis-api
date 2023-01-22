@@ -1,6 +1,6 @@
 use reqwest::{Client, Response};
 use select::document::Document;
-use select::predicate::{Attr, Child, Name};
+use select::predicate::{Attr, Child, Name, Predicate};
 use std::{error::Error, fmt::Display};
 
 use crate::data::DHBWCourse;
@@ -117,6 +117,40 @@ impl<'a> DualisSession<'a> {
             .filter(|v| v.len() >= 4)
             .map(|v| DHBWCourse::new(v[0].clone(), v[1].clone(), Some(v[2].clone()), v[3].clone()))
             .collect();
+        Ok(out)
+    }
+
+    pub async fn get_overview(&self) -> Result<Vec<DHBWCourse>, Box<dyn Error>> {
+        let response = self
+            .send_get_request(
+                "STUDENT_RESULT",
+                "-N0,-N000000000000000,-N000000000000000,-N000000000000000,-N0,-N000000000000000",
+            )
+            .await?;
+
+        let body = response.text().await?;
+        let document = Document::from(body.as_str());
+
+        let out = document
+            .find(Name("tbody").child(Name("tr")))
+            .skip(2)
+            .filter(|n| n.children().filter(|c| c.is(Name("td"))).count() >= 6)
+            .map(|n| {
+                let mut it = n.children().filter(|c| c.is(Name("td")));
+                let id = it.next().unwrap().text().trim().to_owned();
+                let description_parent = it.next().unwrap();
+                let description = if let Some(c) = description_parent.find(Name("a")).next() {
+                    c
+                } else {
+                    description_parent
+                }.text().trim().to_owned();
+                it.next();
+                let ects_points = it.next().unwrap().text().trim().to_owned();
+                let grade = it.next().unwrap().text().trim().to_owned();
+                DHBWCourse::new(id, description, Some(grade), ects_points)
+            })
+            .collect::<Vec<_>>();
+
         Ok(out)
     }
 }

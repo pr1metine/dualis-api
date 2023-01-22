@@ -62,6 +62,28 @@ async fn courses(
     HttpResponse::Ok().body(format!("Courses: {:?}", courses))
 }
 
+#[get("/overview")]
+async fn overview(cred: web::Data<DualisCredentials>) -> impl Responder {
+    let session =
+        match DualisSession::log_into_dualis(cred.url(), cred.usrname(), cred.pass()).await {
+            Err(e) => {
+                return HttpResponse::InternalServerError()
+                    .body(format!("Error during login process: '{}'", e))
+            }
+            Ok(ses) => ses,
+        };
+
+    let overview = match session.get_overview().await {
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to fetch overview: {}", e))
+        }
+        Ok(o) => o,
+    };
+
+    HttpResponse::Ok().body(format!("Overview: {:?}", overview))
+}
+
 #[actix_web::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
@@ -83,7 +105,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         App::new()
             .wrap(Logger::default())
             .app_data(web::Data::new(credentials.clone()))
-            .service(web::scope(&root_path).service(semesters).service(courses))
+            .service(
+                web::scope(&root_path)
+                    .service(semesters)
+                    .service(courses)
+                    .service(overview),
+            )
     })
     .bind((hostname, port))?
     .run()
