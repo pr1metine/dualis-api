@@ -1,4 +1,4 @@
-use reqwest::Client;
+use reqwest::{Client, Response};
 use select::document::Document;
 use select::predicate::{Attr, Child, Name};
 use std::{error::Error, fmt::Display};
@@ -59,17 +59,26 @@ impl<'a> DualisSession<'a> {
         })
     }
 
-    pub async fn get_semesters(&self) -> Result<Vec<DHBWSemester>, Box<dyn Error>> {
-        let response = self
-            .client
+    async fn send_get_request(
+        &self,
+        prgname: &str,
+        additional_arguments: &str,
+    ) -> Result<Response, reqwest::Error> {
+        let arguments = format!("{},{}", self.arguments, additional_arguments);
+
+        self.client
             .get(format!("https://{}/scripts/mgrqispi.dll", self.url))
             .query(&[
                 ("APPNAME", "CampusNet"),
-                ("PRGNAME", "COURSERESULTS"),
-                ("ARGUMENTS", self.arguments.as_str()),
+                ("PRGNAME", prgname),
+                ("ARGUMENTS", arguments.as_str()),
             ])
             .send()
-            .await?;
+            .await
+    }
+
+    pub async fn get_semesters(&self) -> Result<Vec<DHBWSemester>, Box<dyn Error>> {
+        let response = self.send_get_request("COURSERESULTS", "").await?;
 
         let body = response.text().await?;
 
@@ -88,16 +97,9 @@ impl<'a> DualisSession<'a> {
     }
 
     pub async fn get_courses(&self, semester_id: &str) -> Result<Vec<DHBWCourse>, Box<dyn Error>> {
-        let arguments = format!("{},-N{}", self.arguments, semester_id);
+        let arguments = format!("-N{}", semester_id);
         let response = self
-            .client
-            .get(format!("https://{}/scripts/mgrqispi.dll", self.url))
-            .query(&[
-                ("APPNAME", "CampusNet"),
-                ("PRGNAME", "COURSERESULTS"),
-                ("ARGUMENTS", arguments.as_str()),
-            ])
-            .send()
+            .send_get_request("COURSERESULTS", arguments.as_str())
             .await?;
 
         let body = response.text().await?;
