@@ -1,10 +1,11 @@
 use reqwest::{Client, Response};
 use select::document::Document;
 use select::predicate::{Attr, Child, Name, Predicate};
-use std::{error::Error, fmt::Display};
+use std::fmt::Display;
 
 use crate::data::DHBWCourse;
 use crate::data::DHBWSemester;
+use crate::error::Error;
 
 #[derive(Debug)]
 pub struct DualisSession<'a> {
@@ -18,45 +19,55 @@ impl<'a> DualisSession<'a> {
         url: &'a str,
         usrname: &str,
         pass: &str,
-    ) -> Result<DualisSession<'a>, Box<dyn Error>> {
-        let form: [(&str, &str); 9] = [
-            ("usrname", usrname),
-            ("pass", pass),
-            ("APPNAME", "CampusNet"),
-            ("PRGNAME", "LOGINCHECK"),
-            (
-                "ARGUMENTS",
-                "clino,usrname,pass,menuno,menu_type,browser,platform",
-            ),
-            ("clino", "000000000000001"),
-            ("menuno", "000324"),
-            ("browser", ""),
-            ("platform", ""),
-        ];
+    ) -> Result<DualisSession<'a>, Error> {
+        async fn wrap<'b>(
+            url: &'b str,
+            usrname: &str,
+            pass: &str,
+        ) -> Result<DualisSession<'b>, Box<dyn std::error::Error>> {
+            let form: [(&str, &str); 9] = [
+                ("usrname", usrname),
+                ("pass", pass),
+                ("APPNAME", "CampusNet"),
+                ("PRGNAME", "LOGINCHECK"),
+                (
+                    "ARGUMENTS",
+                    "clino,usrname,pass,menuno,menu_type,browser,platform",
+                ),
+                ("clino", "000000000000001"),
+                ("menuno", "000324"),
+                ("browser", ""),
+                ("platform", ""),
+            ];
 
-        let client = Client::builder().cookie_store(true).build()?;
-        let response = client
-            .post(format!("https://{}/scripts/mgrqispi.dll", url))
-            .form(&form)
-            .send()
-            .await?
-            .error_for_status()?;
+            let client = Client::builder().cookie_store(true).build()?;
+            let response = client
+                .post(format!("https://{}/scripts/mgrqispi.dll", url))
+                .form(&form)
+                .send()
+                .await?
+                .error_for_status()?;
 
-        if !response.headers().contains_key("REFRESH") {
-            return Err("No refresh. Indicates invalid credentials".into());
+            if !response.headers().contains_key("REFRESH") {
+                return Err("No refresh. Indicates invalid credentials".into());
+            }
+
+            let arguments = response.headers()["REFRESH"]
+                .to_str()?
+                .chars()
+                .skip_while(|c| *c != '-')
+                .take(26)
+                .collect();
+            Ok(DualisSession {
+                url,
+                arguments,
+                client,
+            })
         }
 
-        let arguments = response.headers()["REFRESH"]
-            .to_str()?
-            .chars()
-            .skip_while(|c| *c != '-')
-            .take(26)
-            .collect();
-        Ok(Self {
-            url,
-            arguments,
-            client,
-        })
+        wrap(url, usrname, pass)
+            .await
+            .map_err(|e| Error::login_failed(e.into()))
     }
 
     async fn send_get_request(
@@ -77,10 +88,16 @@ impl<'a> DualisSession<'a> {
             .await
     }
 
-    pub async fn get_semesters(&self) -> Result<Vec<DHBWSemester>, Box<dyn Error>> {
-        let response = self.send_get_request("COURSERESULTS", "").await?;
+    pub async fn get_semesters(&self) -> Result<Vec<DHBWSemester>, Error> {
+        let response = self
+            .send_get_request("COURSERESULTS", "")
+            .await
+            .map_err(|e| Error::fetch_failed(e.into(), "Semesters".into()))?;
 
-        let body = response.text().await?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| Error::fetch_failed(e.into(), "Semesters".into()))?;
 
         let document = Document::from(body.as_str());
 
@@ -96,13 +113,19 @@ impl<'a> DualisSession<'a> {
         Ok(out)
     }
 
-    pub async fn get_courses(&self, semester_id: &str) -> Result<Vec<DHBWCourse>, Box<dyn Error>> {
+    pub async fn get_courses(&self, semester_id: &str) -> Result<Vec<DHBWCourse>, Error> {
         let arguments = format!("-N{}", semester_id);
         let response = self
             .send_get_request("COURSERESULTS", arguments.as_str())
-            .await?;
+            .await
+            .map_err(|e| {
+                Error::fetch_failed(e.into(), format!("Courses for semester id {semester_id}"))
+            })?;
 
-        let body = response.text().await?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| Error::fetch_failed(e.into(), "Overview".into()))?;
         let document = Document::from(body.as_str());
 
         let out = document
@@ -120,15 +143,19 @@ impl<'a> DualisSession<'a> {
         Ok(out)
     }
 
-    pub async fn get_overview(&self) -> Result<Vec<DHBWCourse>, Box<dyn Error>> {
+    pub async fn get_overview(&self) -> Result<Vec<DHBWCourse>, Error> {
         let response = self
             .send_get_request(
                 "STUDENT_RESULT",
                 "-N0,-N000000000000000,-N000000000000000,-N000000000000000,-N0,-N000000000000000",
             )
-            .await?;
+            .await
+            .map_err(|e| Error::fetch_failed(e.into(), "Overview".into()))?;
 
-        let body = response.text().await?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| Error::fetch_failed(e.into(), "Overview".into()))?;
         let document = Document::from(body.as_str());
 
         let out = document
@@ -143,7 +170,10 @@ impl<'a> DualisSession<'a> {
                     c
                 } else {
                     description_parent
-                }.text().trim().to_owned();
+                }
+                .text()
+                .trim()
+                .to_owned();
                 it.next();
                 let ects_points = it.next().unwrap().text().trim().to_owned();
                 let grade = it.next().unwrap().text().trim().to_owned();

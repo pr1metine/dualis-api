@@ -6,6 +6,7 @@ use env_logger::Env;
 
 mod config;
 mod data;
+mod error;
 mod session;
 
 use config::DualisCredentials;
@@ -13,26 +14,24 @@ use data::query::CoursesQuery;
 use log::{error, info};
 use session::DualisSession;
 
+use crate::data::{DHBWCourse, DHBWSemester};
+
 #[get("/semesters")]
 async fn semesters(cred: web::Data<DualisCredentials>) -> impl Responder {
-    let session =
-        match DualisSession::log_into_dualis(cred.url(), cred.usrname(), cred.pass()).await {
-            Err(e) => {
-                return HttpResponse::InternalServerError()
-                    .body(format!("Error during login process: '{}'", e))
-            }
-            Ok(ses) => ses,
-        };
+    async fn body(
+        cred: web::Data<DualisCredentials>,
+    ) -> Result<Vec<DHBWSemester>, Box<dyn std::error::Error>> {
+        let session =
+            DualisSession::log_into_dualis(cred.url(), cred.usrname(), cred.pass()).await?;
+        let semesters = session.get_semesters().await?;
 
-    let semesters = match session.get_semesters().await {
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to fetch available semesters: '{}'", e))
-        }
-        Ok(sem) => sem,
-    };
+        Ok(semesters)
+    }
 
-    HttpResponse::Ok().body(format!("Semesters: {:?}", semesters))
+    match body(cred).await {
+        Ok(semesters) => HttpResponse::Ok().body(format!("Semesters: {:?}", semesters)),
+        Err(e) => HttpResponse::InternalServerError().body(format!("{e}")),
+    }
 }
 
 #[get("/courses")]
@@ -40,48 +39,40 @@ async fn courses(
     cred: web::Data<DualisCredentials>,
     query: web::Query<CoursesQuery>,
 ) -> impl Responder {
-    let session =
-        match DualisSession::log_into_dualis(cred.url(), cred.usrname(), cred.pass()).await {
-            Err(e) => {
-                return HttpResponse::InternalServerError()
-                    .body(format!("Error during login process: '{}'", e))
-            }
-            Ok(ses) => ses,
-        };
+    async fn body(
+        cred: web::Data<DualisCredentials>,
+        query: web::Query<CoursesQuery>,
+    ) -> Result<Vec<DHBWCourse>, Box<dyn std::error::Error>> {
+        let session =
+            DualisSession::log_into_dualis(cred.url(), cred.usrname(), cred.pass()).await?;
+        let courses = session.get_courses(&query.semester_id).await?;
 
-    let courses = match session.get_courses(&query.semester_id).await {
-        Err(e) => {
-            return HttpResponse::InternalServerError().body(format!(
-                "Failed to fetch courses for given semester '{}': {}",
-                query.semester_id, e
-            ))
-        }
-        Ok(c) => c,
-    };
+        Ok(courses)
+    }
 
-    HttpResponse::Ok().body(format!("Courses: {:?}", courses))
+    match body(cred, query).await {
+        Ok(courses) => HttpResponse::Ok().body(format!("Courses: {:?}", courses)),
+        Err(e) => HttpResponse::InternalServerError().body(format!("{e}")),
+    }
 }
 
 #[get("/overview")]
 async fn overview(cred: web::Data<DualisCredentials>) -> impl Responder {
-    let session =
-        match DualisSession::log_into_dualis(cred.url(), cred.usrname(), cred.pass()).await {
-            Err(e) => {
-                return HttpResponse::InternalServerError()
-                    .body(format!("Error during login process: '{}'", e))
-            }
-            Ok(ses) => ses,
-        };
+    async fn body(
+        cred: web::Data<DualisCredentials>,
+    ) -> Result<Vec<DHBWCourse>, Box<dyn std::error::Error>> {
+        let session =
+            DualisSession::log_into_dualis(cred.url(), cred.usrname(), cred.pass()).await?;
+        let overview = session.get_overview().await?;
 
-    let overview = match session.get_overview().await {
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to fetch overview: {}", e))
-        }
-        Ok(o) => o,
-    };
+        Ok(overview)
+    }
 
-    HttpResponse::Ok().body(format!("Overview: {:?}", overview))
+    match body(cred).await {
+        Ok(overview) => HttpResponse::Ok().body(format!("Overview: {:?}", overview)),
+        Err(e) => HttpResponse::InternalServerError().body(format!("{e}"))
+    }
+    
 }
 
 #[actix_web::main]
@@ -99,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         Ok(c) => c,
     };
-    info!("Loaded server config. Hostname: {hostname}, Port: {port}, Root path: {root_path}");
+    info!("Loaded server config. Hostname: {hostname}, Port: {port}, Root path: {root_path}, User: {}", credentials.usrname());
 
     HttpServer::new(move || {
         App::new()

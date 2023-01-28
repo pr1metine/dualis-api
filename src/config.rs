@@ -1,5 +1,5 @@
 use log::info;
-
+use crate::error::Error;
 #[derive(Debug, Clone)]
 pub struct DualisCredentials {
     url: String,
@@ -18,14 +18,15 @@ impl DualisCredentials {
             .unwrap_or(8080)
     }
     pub fn get_root_path() -> String {
-        std::env!("CARGO_PKG_VERSION").to_owned()
+        format!("v{}", std::env!("CARGO_PKG_VERSION"))
     }
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+        fn get_required_env(env_name: &'static str) -> Result<String, Error> {
+            std::env::var(env_name).map_err(|e| Error::env_error(e.into(), env_name))
+        }
         let url = std::env::var("DUALIS_URL").unwrap_or("dualis.dhbw.de".into());
-        let usrname = std::env::var("USRNAME")
-            .map_err(|e| format!("USRNAME environment variable not specified ({})", e))?;
-        let pass = std::env::var("PASS")
-            .map_err(|e| format!("PASS environment variable not specified ({})", e))?;
+        let usrname = get_required_env("USRNAME")?;
+        let pass = get_required_env("PASS")?;
 
         info!("Loaded dualis credentials from environment variables!");
         Ok(Self { url, usrname, pass })
