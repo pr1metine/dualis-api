@@ -1,5 +1,5 @@
-use log::info;
 use crate::error::Error;
+use log::info;
 #[derive(Debug, Clone)]
 pub struct DualisCredentials {
     url: String,

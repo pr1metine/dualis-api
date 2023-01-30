@@ -1,4 +1,5 @@
 pub mod course;
+pub mod overview;
 pub mod query;
 pub mod semester;
 

@@ -1,5 +1,7 @@
 use std::error::Error;
+use std::time::Duration;
 
+use actix_rt::time;
 use actix_web::middleware::Logger;
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
 use env_logger::Env;
@@ -70,9 +72,8 @@ async fn overview(cred: web::Data<DualisCredentials>) -> impl Responder {
 
     match body(cred).await {
         Ok(overview) => HttpResponse::Ok().body(format!("Overview: {:?}", overview)),
-        Err(e) => HttpResponse::InternalServerError().body(format!("{e}"))
+        Err(e) => HttpResponse::InternalServerError().body(format!("{e}")),
     }
-    
 }
 
 #[actix_web::main]
@@ -91,6 +92,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(c) => c,
     };
     info!("Loaded server config. Hostname: {hostname}, Port: {port}, Root path: {root_path}, User: {}", credentials.usrname());
+
+    actix_rt::spawn(async {
+        let mut interval = time::interval(Duration::from_secs(1));
+        let mut counter = 0;
+
+        loop {
+            interval.tick().await;
+            println!("Hello, World for the {counter}. time!");
+            counter += 1;
+        }
+    });
 
     HttpServer::new(move || {
         App::new()

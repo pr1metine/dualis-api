@@ -46,7 +46,6 @@ impl StdError for Error {
         Some(self.source.as_ref())
     }
 
-
     fn description(&self) -> &str {
         "description() is deprecated; use Display"
     }
@@ -54,7 +53,6 @@ impl StdError for Error {
     fn cause(&self) -> Option<&dyn StdError> {
         self.source()
     }
-
 }
 
 impl Display for Error {

@@ -89,6 +89,21 @@ impl<'a> DualisSession<'a> {
     }
 
     pub async fn get_semesters(&self) -> Result<Vec<DHBWSemester>, Error> {
+        fn extract_semesters(html: &str) -> Vec<DHBWSemester> {
+            let document = Document::from(html);
+
+            let out = document
+                .find(Child(Attr("id", "semester"), Name("option")))
+                .map(|node| {
+                    DHBWSemester::new(
+                        String::from(node.attr("value").unwrap_or("MISSING")),
+                        node.text(),
+                    )
+                })
+                .collect();
+
+            out
+        }
         let response = self
             .send_get_request("COURSERESULTS", "")
             .await
@@ -99,18 +114,7 @@ impl<'a> DualisSession<'a> {
             .await
             .map_err(|e| Error::fetch_failed(e.into(), "Semesters".into()))?;
 
-        let document = Document::from(body.as_str());
-
-        let out = document
-            .find(Child(Attr("id", "semester"), Name("option")))
-            .map(|node| {
-                DHBWSemester::new(
-                    String::from(node.attr("value").unwrap_or("MISSING")),
-                    node.text(),
-                )
-            })
-            .collect();
-        Ok(out)
+        Ok(extract_semesters(body.as_str()))
     }
 
     pub async fn get_courses(&self, semester_id: &str) -> Result<Vec<DHBWCourse>, Error> {
