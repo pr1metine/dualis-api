@@ -16,6 +16,7 @@ use data::query::CoursesQuery;
 use log::{error, info};
 use session::DualisSession;
 
+use crate::data::overview::PerformanceOverview;
 use crate::data::{DHBWCourse, DHBWSemester};
 
 #[get("/semesters")]
@@ -59,21 +60,9 @@ async fn courses(
 }
 
 #[get("/overview")]
-async fn overview(cred: web::Data<DualisCredentials>) -> impl Responder {
-    async fn body(
-        cred: web::Data<DualisCredentials>,
-    ) -> Result<Vec<DHBWCourse>, Box<dyn std::error::Error>> {
-        let session =
-            DualisSession::log_into_dualis(cred.url(), cred.usrname(), cred.pass()).await?;
-        let overview = session.get_overview().await?;
-
-        Ok(overview)
-    }
-
-    match body(cred).await {
-        Ok(overview) => HttpResponse::Ok().body(format!("Overview: {:?}", overview)),
-        Err(e) => HttpResponse::InternalServerError().body(format!("{e}")),
-    }
+async fn overview(data: web::Data<PerformanceOverview>) -> impl Responder {
+    let data = data.read();
+    HttpResponse::Ok().json(&(*data))
 }
 
 #[actix_web::main]
@@ -89,30 +78,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
             error!("Could not retrieve DualisCredentials from environment variables...");
             return Err(e.into());
         }
-        Ok(c) => c,
+        Ok(c) => web::Data::new(c),
     };
+    let shared_overview = web::Data::new(PerformanceOverview::new());
     info!("Loaded server config. Hostname: {hostname}, Port: {port}, Root path: {root_path}, User: {}", credentials.usrname());
 
-    actix_rt::spawn(async {
+    let other_credentials = credentials.clone();
+    let other_overview = shared_overview.clone();
+    actix_rt::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(1));
-        let mut counter = 0;
+        // let other_overview = other_overview.clone();
+        let credentials = other_credentials.clone();
+        let session = DualisSession::log_into_dualis(
+            credentials.url(),
+            credentials.usrname(),
+            credentials.pass(),
+        ).await.unwrap();
 
         loop {
             interval.tick().await;
-            println!("Hello, World for the {counter}. time!");
-            counter += 1;
+            let next_courses = session.get_overview().await.unwrap();
+            other_overview.write().set_courses(next_courses);
+            // println!("Hello, World for the {counter}. time!");
         }
     });
 
+    let other_overview = shared_overview.clone();
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
-            .app_data(web::Data::new(credentials.clone()))
+            .app_data(credentials.clone())
+            .app_data(other_overview.clone())
             .service(
                 web::scope(&root_path)
                     .service(semesters)
                     .service(courses)
-                    .service(overview),
+                    .service(overview), // .service(test)
             )
     })
     .bind((hostname, port))?
